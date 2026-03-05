@@ -1,0 +1,260 @@
+-- ============================================================
+-- Finance Power BI Dashboard — Full DAX Measures Library
+-- Author: Edwin Kato | Senior BI Developer
+-- Version: 1.0 | FY2024 Financial Performance Model
+-- ============================================================
+
+-- ============================================================
+-- SECTION 1: CORE REVENUE MEASURES
+-- ============================================================
+
+Total Revenue = 
+CALCULATE(
+    SUM(fact_transactions[Amount]),
+    dim_accounts[AccountCategory] = "Revenue"
+)
+
+Total Revenue Budget = 
+CALCULATE(
+    SUM(fact_transactions[BudgetAmount]),
+    dim_accounts[AccountCategory] = "Revenue"
+)
+
+Revenue Count = 
+CALCULATE(
+    COUNTROWS(fact_transactions),
+    dim_accounts[AccountCategory] = "Revenue"
+)
+
+Avg Revenue Per Transaction = 
+DIVIDE([Total Revenue], [Revenue Count], 0)
+
+
+-- ============================================================
+-- SECTION 2: CORE EXPENSE MEASURES
+-- ============================================================
+
+Total Expenses = 
+CALCULATE(
+    SUM(fact_transactions[Amount]),
+    dim_accounts[AccountCategory] = "Expense"
+)
+
+Total Expense Budget = 
+CALCULATE(
+    SUM(fact_transactions[BudgetAmount]),
+    dim_accounts[AccountCategory] = "Expense"
+)
+
+Non-Cash Items = 
+CALCULATE(
+    SUM(fact_transactions[Amount]),
+    dim_accounts[AccountCategory] = "Non-Cash"
+)
+
+Operating Expenses (Cash) = [Total Expenses] - [Non-Cash Items]
+
+
+-- ============================================================
+-- SECTION 3: PROFITABILITY MEASURES
+-- ============================================================
+
+Gross Profit = [Total Revenue] - [Total Expenses]
+
+Gross Margin % = 
+DIVIDE([Gross Profit], [Total Revenue], 0)
+
+EBITDA = [Gross Profit] + [Non-Cash Items]
+
+EBITDA Margin % = 
+DIVIDE([EBITDA], [Total Revenue], 0)
+
+
+-- ============================================================
+-- SECTION 4: BUDGET VARIANCE MEASURES
+-- ============================================================
+
+Revenue Budget Variance = [Total Revenue] - [Total Revenue Budget]
+
+Revenue Budget Variance % = 
+DIVIDE([Revenue Budget Variance], [Total Revenue Budget], 0)
+
+Expense Budget Variance = [Total Expense Budget] - [Total Expenses]
+
+Expense Budget Variance % = 
+DIVIDE([Expense Budget Variance], [Total Expense Budget], 0)
+
+Total Budget Variance = 
+[Revenue Budget Variance] - ABS([Expense Budget Variance])
+
+
+-- ============================================================
+-- SECTION 5: TIME INTELLIGENCE — REVENUE
+-- ============================================================
+
+Revenue MTD = 
+CALCULATE(
+    [Total Revenue],
+    DATESMTD(dim_date[FullDate])
+)
+
+Revenue QTD = 
+CALCULATE(
+    [Total Revenue],
+    DATESQTD(dim_date[FullDate])
+)
+
+Revenue YTD = 
+CALCULATE(
+    [Total Revenue],
+    DATESYTD(dim_date[FullDate])
+)
+
+Revenue PY = 
+CALCULATE(
+    [Total Revenue],
+    SAMEPERIODLASTYEAR(dim_date[FullDate])
+)
+
+Revenue YoY Growth = 
+[Total Revenue] - [Revenue PY]
+
+Revenue YoY Growth % = 
+DIVIDE([Revenue YoY Growth], [Revenue PY], 0)
+
+Revenue Prior Month = 
+CALCULATE(
+    [Total Revenue],
+    DATEADD(dim_date[FullDate], -1, MONTH)
+)
+
+Revenue MoM Growth % = 
+DIVIDE([Total Revenue] - [Revenue Prior Month], [Revenue Prior Month], 0)
+
+
+-- ============================================================
+-- SECTION 6: TIME INTELLIGENCE — EXPENSES
+-- ============================================================
+
+Expenses YTD = 
+CALCULATE(
+    [Total Expenses],
+    DATESYTD(dim_date[FullDate])
+)
+
+Expenses PY = 
+CALCULATE(
+    [Total Expenses],
+    SAMEPERIODLASTYEAR(dim_date[FullDate])
+)
+
+Expenses YoY Change % = 
+DIVIDE([Total Expenses] - [Expenses PY], [Expenses PY], 0)
+
+
+-- ============================================================
+-- SECTION 7: RUNNING TOTALS
+-- ============================================================
+
+Revenue Running Total = 
+CALCULATE(
+    [Total Revenue],
+    FILTER(
+        ALL(dim_date[FullDate]),
+        dim_date[FullDate] <= MAX(dim_date[FullDate])
+    )
+)
+
+Expense Running Total = 
+CALCULATE(
+    [Total Expenses],
+    FILTER(
+        ALL(dim_date[FullDate]),
+        dim_date[FullDate] <= MAX(dim_date[FullDate])
+    )
+)
+
+
+-- ============================================================
+-- SECTION 8: KPI STATUS MEASURES (for KPI Cards)
+-- ============================================================
+
+Revenue KPI Status = 
+SWITCH(
+    TRUE(),
+    [Revenue Budget Variance %] >= 0.05, 1,   -- Above target
+    [Revenue Budget Variance %] >= 0, 0,       -- On target
+    -1                                          -- Below target
+)
+
+Expense KPI Status = 
+SWITCH(
+    TRUE(),
+    [Expense Budget Variance %] >= 0.05, 1,    -- Under budget (good)
+    [Expense Budget Variance %] >= 0, 0,       -- On budget
+    -1                                          -- Over budget (bad)
+)
+
+Gross Margin KPI Status = 
+SWITCH(
+    TRUE(),
+    [Gross Margin %] >= 0.45, 1,
+    [Gross Margin %] >= 0.35, 0,
+    -1
+)
+
+
+-- ============================================================
+-- SECTION 9: RANKING & TOP N
+-- ============================================================
+
+Revenue Rank by Department = 
+RANKX(
+    ALL(dim_departments[DepartmentName]),
+    [Total Revenue],
+    ,
+    DESC,
+    DENSE
+)
+
+Top 3 Accounts by Revenue = 
+IF(
+    RANKX(
+        ALL(dim_accounts[AccountName]),
+        [Total Revenue],
+        ,
+        DESC,
+        DENSE
+    ) <= 3,
+    [Total Revenue],
+    BLANK()
+)
+
+
+-- ============================================================
+-- SECTION 10: FORMATTING / DISPLAY HELPERS
+-- ============================================================
+
+Revenue Variance Color = 
+SWITCH(
+    TRUE(),
+    [Revenue Budget Variance %] >= 0.05, "#27ae60",
+    [Revenue Budget Variance %] >= 0,    "#f39c12",
+    "#e74c3c"
+)
+
+Expense Variance Color = 
+SWITCH(
+    TRUE(),
+    [Expense Budget Variance %] >= 0.05, "#27ae60",
+    [Expense Budget Variance %] >= 0,    "#f39c12",
+    "#e74c3c"
+)
+
+Margin Trend Icon = 
+SWITCH(
+    TRUE(),
+    [Revenue YoY Growth %] > 0, "▲ " & FORMAT([Revenue YoY Growth %], "0.0%"),
+    [Revenue YoY Growth %] < 0, "▼ " & FORMAT(ABS([Revenue YoY Growth %]), "0.0%"),
+    "— 0.0%"
+)
